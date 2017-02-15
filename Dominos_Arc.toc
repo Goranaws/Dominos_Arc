@@ -1,0 +1,10 @@
+## Version: beta_1
+## Interface: 70100
+## Title: Dominos_Arc
+## Author: Goranaws
+## Dependencies: Dominos
+## OptionalDeps: LibSharedMedia-3.0
+
+embeds.xml
+
+Dominos_Arc.lua
