@@ -7,8 +7,6 @@ local function VerifyDefaults(self, settings)
 	settings.ARC.Yarc = settings.ARC.arc or 0
 	settings.ARC.XarcOffset = settings.ARC.XarcOffset or 0
 	settings.ARC.Xarc = settings.ARC.Xarc or 0
-	settings.ARC.XarcAdjust = settings.ARC.XarcAdjust or 0
-	settings.ARC.YarcAdjust = settings.ARC.YarcAdjust or 0
 end
 
 function Dominos.ActionBar:GetDefaults()
@@ -68,20 +66,6 @@ hooksecurefunc(Dominos.ActionBar, "CreateMenu", function(self)
 		end,
 	}
 
-	local slider =  panel:NewSlider{
-		name = "Y Offset",
-		min = -100,
-		max = 100,
-		get = function(self) --Getter
-			return panel.owner.sets.ARC.YarcAdjust
-		end,
-		set = function(self) --Setter
-			local owner = panel.owner
-			owner.sets.ARC.YarcAdjust = self:GetValue()
-			owner:Layout()
-			return owner.sets.ARC.YarcAdjust
-		end,
-	}
 
 	local slider =  panel:NewSlider{
 		name = "X Arc",
@@ -112,86 +96,110 @@ hooksecurefunc(Dominos.ActionBar, "CreateMenu", function(self)
 			return owner.sets.ARC.XarcOffset
 		end,
 	}
-	
-	local slider =  panel:NewSlider{
-		name = "X Offset",
-		min = -100,
-		max = 100,
-		get = function(self) --Getter
-			return panel.owner.sets.ARC.XarcAdjust
-		end,
-		set = function(self) --Setter
-			local owner = panel.owner
-			owner.sets.ARC.XarcAdjust = self:GetValue()
-			owner:Layout()
-			return owner.sets.ARC.XarcAdjust
-		end,
-	}
-    return panel
+
+     return panel
 end)
 
 local ButtonBar = Dominos.ButtonBar
 
-
 hooksecurefunc(Dominos.ActionBar, "Layout", function(self)
     VerifyDefaults(self, self.sets)
-	
-    if self.sets.ARC.arcEnable then
+
+     if self.sets.ARC.arcEnable then
         local numButtons = #self.buttons
         if numButtons < 1 then
             ButtonBar.proto.Layout(self)
             return
         end
-        local cols = min(self:NumColumns(), numButtons)
+
+		local cols = min(self:NumColumns(), numButtons)
         local rows = ceil(numButtons / cols)
-        local isLeftToRight = self:GetLeftToRight()
-        local isTopToBottom = self:GetTopToBottom()
-        -- grab base button sizes
-        local l, r, t, b = self:GetButtonInsets()
-        local bW, bH = self:GetButtonSize()
-        local pW, pH = self:GetPadding()
-        local spacing = self:GetSpacing()
-        local buttonWidth = bW + spacing
-        local buttonHeight = bH + spacing
-        local xOff = pW - l
-        local yOff = pH - t
-        local YCurveOffset = (((self.sets.ARC.YarcOffset or 0)/100) * (self:GetWidth()))
-        local XCurveOffset = (((self.sets.ARC.XarcOffset or 0)/100) * (self:GetHeight()))
+		local isLeftToRight = self:GetLeftToRight()
+		local isTopToBottom = self:GetTopToBottom()
+		local pW, pH = self:GetPadding()
 
-        local width = (buttonWidth * cols)
-        local height = buttonWidth * rows
-        local Sx = (((width)/2) - YCurveOffset)--
-        local Sy = (((height)/2) - XCurveOffset)--
+		
+		-- grab base button sizes
+		local l, r, t, b = self:GetButtonInsets()
+		local w, h = self:GetButtonSize()
+		local spacing = self:GetSpacing()
 
-        local a = (height/2)/((width/2)^2)
-        local b = (width/2)/((height/2)^2)
-        local Yarc = self.sets.ARC.Yarc/100
-        local Xarc = self.sets.ARC.Xarc/100
+		local bW = w + spacing
+		local bH = h + spacing
+		
+		local hSpacing = spacing - (l + r)
+		local vSpacing = spacing - (t + b)
+
+
+		--base bar size, no arc applied
+		local width= (cols * w) + ((cols-1) + hSpacing)
+		local height = (rows * h) + ((rows-1) + vSpacing)
+
+			--changes the vertex point of the vertical and horizontal arcs
+		local XCurveOffset = (((self.sets.ARC.XarcOffset or 0)/100) * (width))
+		local YCurveOffset = (((self.sets.ARC.YarcOffset or 0)/100) * (height))
+		
+		local a = (height/2)/((width/2)^2)
+		local b = (width/2)/((height/2)^2)
+
+		local Xarc = self.sets.ARC.Xarc
+		local Yarc = self.sets.ARC.Yarc
+
+		local xOff = -l
+		local yOff = -t
+		
+		--align buttons based on center of frame	
+		local zeroX, zeroY = xOff + (bW)*(((cols)/2) - .5), yOff + (bH)*(((rows)/2) - .5)
+
+		--flex buttons over center of bar
+		local flexX, flexY = xOff + bW*0, yOff + bH*0
+		flexX, flexY = (zeroX) - (flexX - ((b*(((zeroY) - flexY)^2)) * (Xarc/100))), zeroY - (flexY - ((a*(((zeroX) - flexX)^2)) * (Yarc/100)))
+		flexX, flexY = (flexX- zeroX)/2, (flexY - zeroY)/2
+
+
+  		local maxX, maxY = 0, 0
 
         for i, button in ipairs(self.buttons) do
-            local row = floor((i - 1) / cols)
-            if not isTopToBottom then
-                row = rows - (row + 1)
-            end
+			local row = floor((i - 1) / cols)
+			if self:GetTopToBottom() then
+				row = rows - (row + 1)
+			else
+				row = floor((i - 1) / cols)
+			end
 
-            local col = (i - 1) % cols
-            if not isLeftToRight then
-                col = cols - (col + 1)
-            end
+			local col = (i - 1) % cols
+			if self:GetLeftToRight() then
+				col = cols - (col + 1)
+			else
+				col = (i - 1) % cols
+			end
+				
+			local x, y = xOff + buttonWidth*col, yOff + bH*row
+			x, y = zeroX - (x - ((b*(((zeroY - XCurveOffset) - y)^2)) * (Xarc/100))), zeroY - (y - ((a*(((zeroX - YCurveOffset) - x)^2)) * (Yarc/100)))
 
-            local x = xOff + buttonWidth*col
-            local y = yOff + buttonHeight*row
-
-            local lx = Sx - (x +(buttonWidth/2))
-            local ly = Sy - (y +(buttonHeight/2))
-            local y = (y - ((a*(lx^2)) * Yarc)) - self.sets.ARC.YarcAdjust
-            local x = (x - ((b*(ly^2)) * Xarc)) + self.sets.ARC.XarcAdjust
+			x = x + flexX
+			y = - (y - flexY)
+			
+			if math.abs(x) > maxX then
+				maxX = math.abs(x)
+			end
+			
+			if math.abs(y) > maxY then
+				maxY = math.abs(y)
+			end
+			
             button:SetParent(self.header)
             button:ClearAllPoints()
-            button:SetPoint('TOPLEFT', x, -y)
+            button:SetPoint('Center', x + flexX, y )
         end
-        local barWidth = (buttonWidth * cols) + (pW * 2) - spacing
-        local barHeight = (buttonHeight * rows) + (pH * 2) - spacing
-        self:TrySetSize(barWidth, barHeight)
+
+
+        local pW, pH = self:GetPadding()
+		local spacing = self:GetSpacing()
+
+		local barWidth = maxX*2+ bH + pW
+		local barHeight = maxY*2+ bH + pH
+
+		self:TrySetSize(barWidth, barHeight)
     end
 end)
