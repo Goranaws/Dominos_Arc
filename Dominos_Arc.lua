@@ -1,16 +1,22 @@
+local def = {
+	yFlex = 0,
+	yArc = 0,
+	yShift = 0,
+
+	xFlex = 0,
+	xArc = 0,
+	xShift = 0,
+}
+
 local function VerifyDefaults(self, sets)
 	if sets.ARC then
 		-- return
 	end
-	sets.ARC = sets.ARC or {}
+	sets.ARC = sets.ARC or CopyTable(def)
 
-	sets.ARC.yFlex = sets.ARC.yFlex or 0
-	sets.ARC.yArc = sets.ARC.yArc or 0
-	sets.ARC.yShift = sets.ARC.yShift or 0
-
-	sets.ARC.xFlex = sets.ARC.xFlex or 0
-	sets.ARC.xArc = sets.ARC.xArc or 0
-	sets.ARC.xShift = sets.ARC.xShift or 0
+	for key, val in ipairs(def) do
+		sets.ARC[key] = sets.ARC[key] or val
+	end
 end
 function Dominos.ActionBar:GetDefaults()
 	local defaults = {}
@@ -30,11 +36,7 @@ end
 local config
 
 
-
-
-
  local function NewButton(self, name, width, height, click)
-print(self, name, width, height, click)
 	local button = CreateFrame('Button', nil, self, 'UIMenuButtonStretchTemplate')
 	button:ClearAllPoints()
 	button.Text:SetAllPoints(button)
@@ -49,15 +51,15 @@ print(self, name, width, height, click)
 	button:ClearAllPoints()
 	
 	if prev then
-		button:SetPoint('Top', self.lastWidget, 'Bottom', 0, -10)
+		button:SetPoint('Top', self.lastWidget, 'Bottom', 0, -6)
 	else
 		button:SetPoint('TOPLEFT', 0, -2)
 	end
 	button:SetSize(width, height)
 
-	local width, height = button:GetSize()
-	self.height = self.height + (height + 2)
-	self.width = max(self.width, width)
+	--local width, height = button:GetSize()
+	--self.height = self.height + (height + 2)
+	--self.width = max(self.width, width)
 	self.lastWidget = button
 
 	self:Render()
@@ -65,9 +67,151 @@ print(self, name, width, height, click)
 
 	return button
 end
+config = Dominos:GetOptions()
+
+local copy = {}
+function config.Panel:addButtons()
+	local panel = self
+	panel.NewButton = panel.NewButton or NewButton
+	panel:NewButton("Reset", 250, 18, function(self)
+		if IsModifierKeyDown() then
+		
+		for _,bar in panel.owner:GetAll() do
+			if type(tonumber(bar.id)) == "number" then
+				Dominos:SetFrameSets(bar.id, CopyTable(bar:GetDefaults()))
+				bar:LoadSettings()
+				bar:Layout()
+				bar:Reposition()
+			end
+		end
+		
+		return
+		else
+			Dominos:SetFrameSets(panel.owner.id, panel.owner:GetDefaults())
+		
+			panel.owner:LoadSettings()
+			panel.owner:Layout()
+			panel.owner:Reposition()
+		end
+		panel:Hide()
+		panel:Show()
+	end)
+
+	local b = panel:NewButton("Apply to All", 250, 18, function(self)
+		panel.owner:ApplyAll(panel.owner.sets)
+	end)
+		b:SetScript("OnShow", function(self)
+
+			if type(tonumber(panel.owner.id)) ~= "number" then
+			self:Hide()
+		end
+	end)
+	
+	
+	
+	local c = panel:NewButton("Copy", 250, 18, function(self)
+		if IsModifierKeyDown() then
+			toBeCopied = nil
+			for i, button in pairs(copy) do
+				button.Text:SetText("Copy")
+			end
+	
+		elseif not toBeCopied then
+			toBeCopied = panel
+			for i, button in pairs(copy) do
+				button.Text:SetText("Paste")
+			end
+			
+		else
+			if self ~= toBeCopied then
+				local source = CopyTable(toBeCopied.owner.sets)
+				source.x = nil
+				source.y = nil
+				source.point = nil
+				source.anchor = nil
+				local target = Dominos:GetFrameSets(panel.owner.id)
+				for key, val in pairs(source) do
+					target[key] = val
+				end
+				panel.owner:Layout()
+				panel.owner:Reposition()
+			end
+		end
+		panel:Hide()
+		panel:Show()
+	end)
+	c:SetScript("OnShow", function(self)
+		if toBeCopied then 
+			self.Text:SetText("Paste")
+		else
+			self.Text:SetText("Copy")
+		end
+		if type(tonumber(panel.owner.id)) ~= "number" then
+			self:Hide()
+		end
+	end)
+	
+	c:SetScript("OnEnter", function(self)
+		if IsModifierKeyDown() and toBeCopied then 
+			self.Text:SetText("Click to Clear")
+		end
+	end)
+	
+	c:SetScript("OnLeave", function(self)
+		if toBeCopied then 
+			self.Text:SetText("Paste")
+		else
+			self.Text:SetText("Copy")
+		end
+	end)
+	tinsert(copy, c)
+	
+	
+	
+end
+
+
+
+
+
+
+local function NewSlider(panel, name, Min, Max, key, modifier)
+modifier = modifier or 1
+
+--local sets = panel.owner.sets.ARC
+	local slider = panel:NewSlider{
+		name = name,
+		min = Min,
+		max = Max,
+		get = function(self) --Getter
+			local val = panel.owner.sets.ARC[key]
+			return val * modifier
+		end,
+		set = function(self) --Setter
+			local owner = panel.owner
+			panel.owner.sets.ARC[key] = self:GetValue()/modifier
+			owner:Layout()
+			return panel.owner.sets.ARC[key]
+		end,
+	}
+	slider:SetScript("OnMouseUp", function(self)
+		if IsShiftKeyDown() then
+			self:SetValue(def[key])
+		end
+	end)
+end
+
+
+
+hooksecurefunc(config.Panel, "AddAdvancedOptions", config.Panel.addButtons)
+
+local copy = {}
+local toBeCopied
 
 local function CreateMenu(self)
 config = Dominos:GetOptions()
+
+
 	local panel = self.menu:NewPanel("Arc")
 	local c = panel:NewCheckButton{
 			name = "Enable",
@@ -77,97 +221,80 @@ config = Dominos:GetOptions()
 				panel.owner:Layout()
 			end
 	}
-	local slider = panel:NewSlider{
-		name = "Y Arc",
-		min = -100,
-		max = 100,
-		get = function(self) --Getter
-			return panel.owner.sets.ARC.yArc*2
-		end,
-		set = function(self) --Setter
-			local owner = panel.owner
-			owner.sets.ARC.yArc = self:GetValue()/2
-			owner:Layout()
-			return owner.sets.ARC.yArc
-		end,
-	}
-	local slider = panel:NewSlider{
-		name = "Y Flex",
-		min = -100,
-		max = 100,
-		get = function(self) --Getter
-			return panel.owner.sets.ARC.yFlex
-		end,
-		set = function(self) --Setter
-			local owner = panel.owner
-			owner.sets.ARC.yFlex = self:GetValue()
-			owner:Layout()
-			return owner.sets.ARC.yFlex
-		end,
-	}
-	local slider = panel:NewSlider{
-		name = "Y Offset",
-		min = -100,
-		max = 100,
-		get = function(self) --Getter
-			return panel.owner.sets.ARC.yShift
-		end,
-		set = function(self) --Setter
-			local owner = panel.owner
-			owner.sets.ARC.yShift = self:GetValue()
-			owner:Layout()
-			return owner.sets.ARC.yShift
-		end,
-	}
-	local slider = panel:NewSlider{
-		name = "X Arc",
-		min = -100,
-		max = 100,
-		get = function(self) --Getter
-			return panel.owner.sets.ARC.xArc*2
-		end,
-		set = function(self) --Setter
-			local owner = panel.owner
-			owner.sets.ARC.xArc = self:GetValue()/2
-			owner:Layout()
-			return owner.sets.ARC.xArc
-		end,
-	}
-	local slider = panel:NewSlider{
-		name = "X Arc Shift",
-		min = -100,
-		max = 100,
-		get = function(self) --Getter
-			return panel.owner.sets.ARC.xFlex
-		end,
-		set = function(self) --Setter
-			local owner = panel.owner
-			owner.sets.ARC.xFlex = self:GetValue()
-			owner:Layout()
-			return owner.sets.ARC.xFlex
-		end,
-	}
-	local slider = panel:NewSlider{
-		name = "X Offset",
-		min = -100,
-		max = 100,
-		get = function(self) --Getter
-			return panel.owner.sets.ARC.xShift
-		end,
-			set = function(self) --Setter
-			local owner = panel.owner
-			owner.sets.ARC.xShift = self:GetValue()
-			owner:Layout()
-			return owner.sets.ARC.xShift
-		end,
-	}
+
+	NewSlider(panel, "Y Arc" , -100, 100, "yArc", 2)
+	NewSlider(panel, "Y Flex", -100, 100, "yFlex")
+	NewSlider(panel, "Y Offset", -100, 100, "yShift")
+	NewSlider(panel, "X Arc" , -100, 100, "xArc", 2)
+	NewSlider(panel, "X Flex", -100, 100, "xFlex")
+	NewSlider(panel, "X Offset", -100, 100, "xShift")
+	
 
 	panel.NewButton = panel.NewButton or NewButton
+	panel:NewButton("Reset", 250, 18, function(self)
+		panel.owner.sets.ARC = nil
+		VerifyDefaults(panel.owner, panel.owner.sets)
+		panel:Hide()
+		panel:Show()
+	end)
 
-
-	local c = panel:NewButton("Apply to All", 250, 36, function(self)
-			panel.owner:ApplyToAll(panel.owner.sets)
-		end)
+	panel:NewButton("Apply to All", 250, 18, function(self)
+		panel.owner:ApplyToAll(panel.owner.sets)
+	end)
+	
+	local c = panel:NewButton("Copy", 250, 18, function(self)
+		if IsModifierKeyDown() then
+			toBeCopied = nil
+			for i, button in pairs(copy) do
+				button.Text:SetText("Copy")
+			end
+	
+		elseif not toBeCopied then
+			toBeCopied = panel
+			for i, button in pairs(copy) do
+				button.Text:SetText("Paste")
+			end
+			
+		else
+			if self ~= toBeCopied then
+				local source = CopyTable(toBeCopied.owner.sets.ARC)
+				source.x = nil
+				source.y = nil
+				local target = Dominos:GetFrameSets(panel.owner.id).ARC
+				for key, val in pairs(source) do
+					target[key] = val
+				end
+				panel.owner:Layout()
+			end
+		end
+		panel:Hide()
+		panel:Show()
+	end)
+	c:SetScript("OnShow", function(self)
+		if toBeCopied then 
+			self.Text:SetText("Paste")
+		else
+			self.Text:SetText("Copy")
+		end
+		if type(tonumber(panel.owner.id)) ~= "number" then
+			self:Hide()
+		end
+	end)
+	
+	c:SetScript("OnEnter", function(self)
+		if IsModifierKeyDown() and toBeCopied then 
+			self.Text:SetText("Click to Clear")
+		end
+	end)
+	
+	c:SetScript("OnLeave", function(self)
+		if toBeCopied then 
+			self.Text:SetText("Paste")
+		else
+			self.Text:SetText("Copy")
+		end
+	end)
+	tinsert(copy, c)
 	return panel
 end
 hooksecurefunc(Dominos.ActionBar, "CreateMenu", CreateMenu)
@@ -274,7 +401,8 @@ local function Layout(self)
 		x, y = -(x - ((b*(((zeroY - xFlex) - y)^2)) * ((xArc/100) * width))), -(y - ((a*(((zeroX - yFlex) - x)^2)) * ((yArc/100)*height)))
 		x = x - flexX
 		y = - (y - flexY)
-
+	
+		
 		if x > maxX then
 			maxX = x
 		end
@@ -288,6 +416,9 @@ local function Layout(self)
 		if y < minY then
 			minY = y
 		end
+		
+		
+		
 		button:SetParent(self.header)
 		button:ClearAllPoints()
 		button:SetPoint('Center', x + xShift, y + yShift)
@@ -318,6 +449,27 @@ function Dominos.ActionBar:GetArc()
 	
 	return yFlex, yArc, yShift, xFlex, xArc, xShift
 end
+
+
+
+function Dominos.ActionBar:ApplyAll(sets)
+	local source = CopyTable(sets)
+	source.x = nil
+	source.y = nil
+	source.anchor = nil
+	source.point = nil
+
+	for _,bar in self:GetAll() do
+		if type(tonumber(bar.id)) == "number" then
+			local target = Dominos:GetFrameSets(bar.id)
+			for key, val in pairs(source) do
+				target[key] = val
+			end
+			bar:Layout()
+		end
+	end
+end
+
 
 function Dominos.ActionBar:ApplyToAll(sets)
 	for _,bar in self:GetAll() do
